@@ -1,0 +1,10 @@
+package com.lapoushko.feature_experiment.api.domain.usecase
+
+import com.lapoushko.feature_experiment.api.domain.ExperimentRepository
+import javax.inject.Inject
+
+class StartExperimentSessionUseCase @Inject constructor(
+    private val repository: ExperimentRepository
+) {
+    suspend operator fun invoke(title: String): Long = repository.startSession(title)
+}

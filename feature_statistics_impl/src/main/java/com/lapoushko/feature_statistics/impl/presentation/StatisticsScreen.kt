@@ -1,6 +1,7 @@
 package com.lapoushko.feature_statistics.impl.presentation
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,6 +38,13 @@ fun StatisticsRoute(
 private fun StatisticsScreen(uiState: StatisticsUiState) {
     when (uiState) {
         is StatisticsUiState.Loading -> FullScreenLoading(modifier = Modifier.fillMaxSize())
+        is StatisticsUiState.NotStarted -> Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+            Text(
+                text = "Матч ещё не начат — статистика появится после старта",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         is StatisticsUiState.Content -> Column(modifier = Modifier.fillMaxSize()) {
             if (uiState.statistics.isStale) {
                 StaleDataBanner()
@@ -45,7 +53,7 @@ private fun StatisticsScreen(uiState: StatisticsUiState) {
             val timeLabel = if (uiState.statistics.isInfiniteMode) {
                 "без ограничения по времени"
             } else {
-                "осталось ${uiState.statistics.remainingSeconds} с из ${uiState.statistics.durationSeconds} с"
+                "осталось ${uiState.statistics.liveRemainingSeconds} с из ${uiState.statistics.durationSeconds} с"
             }
             Text(
                 text = "Режим: $modeLabel · $timeLabel",

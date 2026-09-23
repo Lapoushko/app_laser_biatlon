@@ -26,7 +26,7 @@ class StatisticsRepositoryImpl @Inject constructor(
     private val dispatchers: DispatcherProvider
 ) : StatisticsRepository {
 
-    override fun observeMatchStatistics(): Flow<MatchStatistics> = flow {
+    override fun observeMatchStatistics(): Flow<MatchStatistics?> = flow {
         while (currentCoroutineContext().isActive) {
             val fetched = runCatching {
                 val response = retrofitServiceFactory.create(StatisticsApiService::class.java).getMatchData()
@@ -43,9 +43,15 @@ class StatisticsRepositoryImpl @Inject constructor(
                 )
                 emit(statistics)
             }.onFailure {
-                cachedStatisticsDao.getSnapshot()?.let { cached ->
+                // Матч мог ни разу не запускаться — тогда кэша тоже нет, и это не ошибка,
+                // а нормальное "нечего показывать". emit(null) вместо молчания — иначе экран
+                // навсегда останется в состоянии загрузки.
+                val cached = cachedStatisticsDao.getSnapshot()
+                if (cached != null) {
                     val statistics = Json.decodeFromString(MatchDataDto.serializer(), cached.payloadJson).toDomain()
                     emit(statistics.copy(isStale = true))
+                } else {
+                    emit(null)
                 }
             }
 

@@ -14,7 +14,9 @@ class StatisticsViewModel @Inject constructor(
 ) : ViewModel() {
 
     val uiState: StateFlow<StatisticsUiState> = observeMatchStatistics()
-        .map<_, StatisticsUiState> { StatisticsUiState.Content(it) }
+        .map<_, StatisticsUiState> { statistics ->
+            if (statistics == null) StatisticsUiState.NotStarted else StatisticsUiState.Content(statistics)
+        }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 5000),

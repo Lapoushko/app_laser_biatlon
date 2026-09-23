@@ -2,11 +2,7 @@ package com.lapoushko.feature_targets.impl
 
 import com.lapoushko.feature_targets.api.domain.Target
 import com.lapoushko.feature_targets.api.domain.usecase.ObserveTargetsUseCase
-import com.lapoushko.feature_targets.api.domain.usecase.StartMatchUseCase
-import com.lapoushko.feature_targets.api.domain.usecase.StopMatchUseCase
 import com.lapoushko.feature_targets.impl.presentation.TargetsViewModel
-import io.mockk.coEvery
-import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -25,8 +21,6 @@ import org.junit.Test
 class TargetsViewModelTest {
 
     private val observeTargets: ObserveTargetsUseCase = mockk()
-    private val startMatch: StartMatchUseCase = mockk(relaxed = true)
-    private val stopMatch: StopMatchUseCase = mockk(relaxed = true)
 
     @Before
     fun setUp() {
@@ -43,33 +37,21 @@ class TargetsViewModelTest {
         val targets = listOf(Target(id = 1, batteryCharge = 100, hitsCount = 3, players = mapOf("Иванов" to 3)))
         every { observeTargets() } returns flowOf(targets)
 
-        val viewModel = TargetsViewModel(observeTargets, startMatch, stopMatch)
+        val viewModel = TargetsViewModel(observeTargets)
 
         assertEquals(targets, viewModel.uiState.value.targets)
         assertEquals(false, viewModel.uiState.value.isLoading)
     }
 
     @Test
-    fun `start match delegates to use case with current settings`() = runTest {
+    fun `loading stops even when match has not started yet`() = runTest {
+        // До старта матча /get_match_data не отдаёт мишеней — репозиторий эмитит пустой список,
+        // а не молчит, иначе экран навсегда останется в состоянии загрузки.
         every { observeTargets() } returns flowOf(emptyList())
-        coEvery { startMatch(false, 90) } returns Result.success(Unit)
-        val viewModel = TargetsViewModel(observeTargets, startMatch, stopMatch)
 
-        viewModel.onInfiniteModeChange(false)
-        viewModel.onDurationChange("90")
-        viewModel.onStartMatch()
+        val viewModel = TargetsViewModel(observeTargets)
 
-        coVerify(exactly = 1) { startMatch(false, 90) }
-    }
-
-    @Test
-    fun `stop match delegates to use case`() = runTest {
-        every { observeTargets() } returns flowOf(emptyList())
-        coEvery { stopMatch(0) } returns Result.success(Unit)
-        val viewModel = TargetsViewModel(observeTargets, startMatch, stopMatch)
-
-        viewModel.onStopMatch()
-
-        coVerify(exactly = 1) { stopMatch(0) }
+        assertEquals(emptyList<Target>(), viewModel.uiState.value.targets)
+        assertEquals(false, viewModel.uiState.value.isLoading)
     }
 }
