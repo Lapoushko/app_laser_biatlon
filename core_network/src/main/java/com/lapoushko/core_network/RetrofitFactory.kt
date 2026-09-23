@@ -16,6 +16,7 @@ private val loggingInterceptor = HttpLoggingInterceptor().apply {
 
 private val okHttpClient = OkHttpClient.Builder()
     .addInterceptor(loggingInterceptor)
+    .addInterceptor(NetworkTrafficInterceptor { RetrofitFactory.recorder })
     .connectTimeout(5, TimeUnit.SECONDS)
     .readTimeout(5, TimeUnit.SECONDS)
     .writeTimeout(5, TimeUnit.SECONDS)
@@ -26,6 +27,12 @@ private val okHttpClient = OkHttpClient.Builder()
  * android:usesCleartextTraffic для этого включён в манифесте app-модуля.
  */
 object RetrofitFactory {
+
+    /**
+     * Заменяется на реальную реализацию (запись в Room) в [com.lapoushko.app_laser_biatlon.LaserBiatlonApp]
+     * при старте приложения. До этого момента и в тестах трафик просто не сохраняется.
+     */
+    var recorder: NetworkTrafficRecorder = NetworkTrafficRecorder { }
 
     fun <T> create(baseUrl: String, serviceClass: Class<T>): T {
         val normalizedUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"

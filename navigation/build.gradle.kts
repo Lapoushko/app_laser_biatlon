@@ -29,6 +29,8 @@ dependencies {
     implementation(project(":feature_connection_impl"))
     implementation(project(":feature_statistics_impl"))
     implementation(project(":feature_targets_impl"))
+    implementation(project(":feature_network_monitor_impl"))
+    implementation(project(":feature_experiment_impl"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

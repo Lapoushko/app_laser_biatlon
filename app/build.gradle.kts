@@ -52,6 +52,10 @@ dependencies {
     implementation(project(":feature_statistics_impl"))
     implementation(project(":feature_targets_api"))
     implementation(project(":feature_targets_impl"))
+    implementation(project(":feature_network_monitor_api"))
+    implementation(project(":feature_network_monitor_impl"))
+    implementation(project(":feature_experiment_api"))
+    implementation(project(":feature_experiment_impl"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

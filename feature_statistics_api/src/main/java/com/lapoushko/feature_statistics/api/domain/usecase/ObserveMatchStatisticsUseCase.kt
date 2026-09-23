@@ -8,5 +8,5 @@ import javax.inject.Inject
 class ObserveMatchStatisticsUseCase @Inject constructor(
     private val repository: StatisticsRepository
 ) {
-    operator fun invoke(): Flow<MatchStatistics> = repository.observeMatchStatistics()
+    operator fun invoke(): Flow<MatchStatistics?> = repository.observeMatchStatistics()
 }
