@@ -22,7 +22,8 @@ fun ExperimentEventEntity.toDomain(): ExperimentEvent? = when (kind) {
     ExperimentEventEntity.KIND_CHECKPOINT -> ExperimentEvent.Checkpoint(
         timestampEpochMillis = timestampEpochMillis,
         label = label.orEmpty(),
-        rssiDbm = rssiDbm
+        rssiDbm = rssiDbm,
+        distanceMeters = distanceMeters
     )
     else -> null
 }

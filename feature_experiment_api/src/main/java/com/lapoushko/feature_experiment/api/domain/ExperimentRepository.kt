@@ -9,7 +9,7 @@ interface ExperimentRepository {
     suspend fun startSession(title: String): Long
     suspend fun endSession(sessionId: Long)
     suspend fun deleteSession(sessionId: Long)
-    suspend fun recordCheckpoint(sessionId: Long, label: String)
+    suspend fun recordCheckpoint(sessionId: Long, label: String, distanceMeters: Double?)
 
     /**
      * Пока кто-то подписан на этот Flow — раз в PING_INTERVAL опрашивает сервер и пишет

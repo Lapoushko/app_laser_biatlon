@@ -51,17 +51,19 @@ class ExperimentRepositoryImpl @Inject constructor(
         dao.deleteSession(sessionId)
     }
 
-    override suspend fun recordCheckpoint(sessionId: Long, label: String) = withContext(dispatchers.io) {
-        dao.insertEvent(
-            ExperimentEventEntity(
-                sessionId = sessionId,
-                timestampEpochMillis = System.currentTimeMillis(),
-                kind = ExperimentEventEntity.KIND_CHECKPOINT,
-                label = label,
-                rssiDbm = wifiSignalReader.currentRssiDbm()
+    override suspend fun recordCheckpoint(sessionId: Long, label: String, distanceMeters: Double?) =
+        withContext(dispatchers.io) {
+            dao.insertEvent(
+                ExperimentEventEntity(
+                    sessionId = sessionId,
+                    timestampEpochMillis = System.currentTimeMillis(),
+                    kind = ExperimentEventEntity.KIND_CHECKPOINT,
+                    label = label,
+                    rssiDbm = wifiSignalReader.currentRssiDbm(),
+                    distanceMeters = distanceMeters
+                )
             )
-        )
-    }
+        }
 
     override fun runPingLoop(sessionId: Long): Flow<Unit> = flow {
         while (currentCoroutineContext().isActive) {

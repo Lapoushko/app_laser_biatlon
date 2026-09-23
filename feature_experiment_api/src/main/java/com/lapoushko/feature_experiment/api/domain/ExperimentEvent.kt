@@ -18,6 +18,8 @@ sealed interface ExperimentEvent {
     data class Checkpoint(
         override val timestampEpochMillis: Long,
         val label: String,
-        val rssiDbm: Int?
+        val rssiDbm: Int?,
+        /** Расстояние до точки доступа в момент метки, м — опционально, нужно для модели затухания сигнала. */
+        val distanceMeters: Double?
     ) : ExperimentEvent
 }

@@ -1,8 +1,11 @@
 package com.lapoushko.feature_experiment.api.domain.usecase
 
+import com.lapoushko.feature_experiment.api.domain.ExperimentCorrelation
 import com.lapoushko.feature_experiment.api.domain.ExperimentEvent
 import com.lapoushko.feature_experiment.api.domain.ExperimentSegment
 import com.lapoushko.feature_experiment.api.domain.ExperimentSummary
+import com.lapoushko.feature_experiment.api.domain.fitPathLossModel
+import com.lapoushko.feature_experiment.api.domain.pearsonCorrelation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -20,6 +23,7 @@ class ObserveExperimentSummaryUseCase @Inject constructor(
 private fun List<ExperimentEvent>.toSummary(): ExperimentSummary {
     val segments = mutableListOf<ExperimentSegment>()
     var label = FIRST_SEGMENT_LABEL
+    var distanceMeters: Double? = null
     var segmentStart = firstOrNull()?.timestampEpochMillis ?: 0L
     var pings = mutableListOf<ExperimentEvent.Ping>()
 
@@ -30,6 +34,7 @@ private fun List<ExperimentEvent>.toSummary(): ExperimentSummary {
             segments += ExperimentSegment(
                 label = label,
                 startedAtEpochMillis = segmentStart,
+                distanceMeters = distanceMeters,
                 pingCount = pings.size,
                 successCount = pings.count { it.success },
                 averageRttMillis = rttValues.average().toLong(),
@@ -46,6 +51,7 @@ private fun List<ExperimentEvent>.toSummary(): ExperimentSummary {
                 flushSegment()
                 pings = mutableListOf()
                 label = event.label
+                distanceMeters = event.distanceMeters
                 segmentStart = event.timestampEpochMillis
             }
             is ExperimentEvent.Ping -> pings.add(event)
@@ -57,6 +63,30 @@ private fun List<ExperimentEvent>.toSummary(): ExperimentSummary {
     return ExperimentSummary(
         segments = segments,
         totalPings = allPings.size,
-        totalSuccess = allPings.count { it.success }
+        totalSuccess = allPings.count { it.success },
+        correlation = segments.toCorrelation(),
+        pathLossModel = segments.toPathLossModel()
     )
 }
+
+private fun List<ExperimentSegment>.toCorrelation(): ExperimentCorrelation {
+    val withRssi = filter { it.averageRssiDbm != null }
+    val rssiVsRtt = pearsonCorrelation(
+        xs = withRssi.map { it.averageRssiDbm!!.toDouble() },
+        ys = withRssi.map { it.averageRttMillis?.toDouble() ?: 0.0 }
+    )
+    val rssiVsLoss = pearsonCorrelation(
+        xs = withRssi.map { it.averageRssiDbm!!.toDouble() },
+        ys = withRssi.map { it.lossPercent.toDouble() }
+    )
+    return ExperimentCorrelation(rssiVsRtt = rssiVsRtt, rssiVsLoss = rssiVsLoss)
+}
+
+private fun List<ExperimentSegment>.toPathLossModel() =
+    fitPathLossModel(
+        points = mapNotNull { segment ->
+            val distance = segment.distanceMeters
+            val rssi = segment.averageRssiDbm
+            if (distance != null && rssi != null) distance to rssi.toDouble() else null
+        }
+    )

@@ -45,6 +45,7 @@ class ExperimentViewModel @Inject constructor(
     private val selectedSessionId = MutableStateFlow<Long?>(null)
     private val titleInput = MutableStateFlow("")
     private val checkpointInput = MutableStateFlow("")
+    private val distanceInput = MutableStateFlow("")
     private val hasLocationPermission = MutableStateFlow(false)
 
     private var pingJob: Job? = null
@@ -67,23 +68,25 @@ class ExperimentViewModel @Inject constructor(
     private val inputState = combine(
         titleInput,
         checkpointInput,
+        distanceInput,
         hasLocationPermission
-    ) { title, checkpoint, permission -> Triple(title, checkpoint, permission) }
+    ) { title, checkpoint, distance, permission -> InputState(title, checkpoint, distance, permission) }
 
     val uiState: StateFlow<ExperimentUiState> = combine(
         sessionsState,
         detailState,
         inputState
-    ) { (sessions, activeId, selectedId), (events, summary), (title, checkpoint, permission) ->
+    ) { (sessions, activeId, selectedId), (events, summary), input ->
         ExperimentUiState(
             sessions = sessions,
             activeSessionId = activeId,
             selectedSessionId = selectedId,
             events = events,
             summary = summary,
-            titleInput = title,
-            checkpointInput = checkpoint,
-            hasLocationPermission = permission
+            titleInput = input.title,
+            checkpointInput = input.checkpoint,
+            distanceInput = input.distance,
+            hasLocationPermission = input.permission
         )
     }.stateIn(
         scope = viewModelScope,
@@ -97,6 +100,10 @@ class ExperimentViewModel @Inject constructor(
 
     fun onCheckpointInputChange(value: String) {
         checkpointInput.value = value
+    }
+
+    fun onDistanceInputChange(value: String) {
+        distanceInput.value = value
     }
 
     fun onLocationPermissionResult(granted: Boolean) {
@@ -130,9 +137,11 @@ class ExperimentViewModel @Inject constructor(
         val id = activeSessionId.value ?: return
         val label = checkpointInput.value.trim()
         if (label.isEmpty()) return
+        val distanceMeters = distanceInput.value.trim().replace(',', '.').toDoubleOrNull()
         viewModelScope.launch {
-            recordExperimentCheckpoint(id, label)
+            recordExperimentCheckpoint(id, label, distanceMeters)
             checkpointInput.value = ""
+            distanceInput.value = ""
         }
     }
 
@@ -156,4 +165,11 @@ class ExperimentViewModel @Inject constructor(
 
     private fun defaultSessionTitle(): String =
         "Замер " + SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date())
+
+    private data class InputState(
+        val title: String,
+        val checkpoint: String,
+        val distance: String,
+        val permission: Boolean
+    )
 }

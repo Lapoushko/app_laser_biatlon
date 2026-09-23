@@ -12,6 +12,7 @@ data class ExperimentUiState(
     val summary: ExperimentSummary = ExperimentSummary(emptyList(), 0, 0),
     val titleInput: String = "",
     val checkpointInput: String = "",
+    val distanceInput: String = "",
     val hasLocationPermission: Boolean = false
 ) {
     val isRunning: Boolean get() = activeSessionId != null

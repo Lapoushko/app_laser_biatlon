@@ -17,7 +17,9 @@ data class ExperimentEventEntity(
     val success: Boolean? = null,
     val rttMillis: Long? = null,
     val rssiDbm: Int? = null,
-    val label: String? = null
+    val label: String? = null,
+    /** Расстояние до точки доступа, указанное оператором при метке, м — для CHECKPOINT. */
+    val distanceMeters: Double? = null
 ) {
     companion object {
         const val KIND_PING = "PING"

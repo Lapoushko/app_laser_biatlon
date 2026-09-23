@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -28,20 +29,32 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.lapoushko.core_ui.di.LocalViewModelFactory
+import com.lapoushko.feature_experiment.api.domain.ExperimentEvent
 import com.lapoushko.feature_experiment.api.domain.ExperimentSegment
 import com.lapoushko.feature_experiment.api.domain.ExperimentSession
 import com.lapoushko.feature_experiment.api.domain.ExperimentSummary
+import com.lapoushko.feature_experiment.impl.data.buildExperimentCsv
+import com.lapoushko.feature_experiment.impl.data.buildExperimentXlsx
 import java.text.SimpleDateFormat
 import java.util.Locale
+
+private const val XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+private val UTF8_BOM = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
 
 @Composable
 fun ExperimentRoute(
@@ -54,6 +67,33 @@ fun ExperimentRoute(
         ActivityResultContracts.RequestPermission()
     ) { granted -> viewModel.onLocationPermissionResult(granted) }
 
+    var pendingCsvContent by remember { mutableStateOf<String?>(null) }
+    val saveCsvLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        val content = pendingCsvContent
+        pendingCsvContent = null
+        if (uri != null && content != null) {
+            context.contentResolver.openOutputStream(uri)?.use { stream ->
+                // Excel определяет кодировку CSV по BOM — без него UTF-8 с кириллицей
+                // открывается как ANSI/CP1251 и превращается в кракозябры.
+                stream.write(UTF8_BOM)
+                stream.write(content.toByteArray(Charsets.UTF_8))
+            }
+        }
+    }
+
+    var pendingXlsxContent by remember { mutableStateOf<ByteArray?>(null) }
+    val saveXlsxLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(XLSX_MIME_TYPE)
+    ) { uri ->
+        val content = pendingXlsxContent
+        pendingXlsxContent = null
+        if (uri != null && content != null) {
+            context.contentResolver.openOutputStream(uri)?.use { it.write(content) }
+        }
+    }
+
     LaunchedEffect(Unit) {
         viewModel.onLocationPermissionResult(hasLocationPermission(context))
     }
@@ -62,13 +102,22 @@ fun ExperimentRoute(
         uiState = uiState,
         onTitleChange = viewModel::onTitleChange,
         onCheckpointInputChange = viewModel::onCheckpointInputChange,
+        onDistanceInputChange = viewModel::onDistanceInputChange,
         onStartClick = viewModel::startSession,
         onStopClick = viewModel::stopSession,
         onMarkCheckpointClick = viewModel::markCheckpoint,
         onSessionClick = viewModel::selectSession,
         onDeleteSessionClick = viewModel::deleteSession,
         onRequestPermissionClick = { permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
-        onShareClick = { session, summary -> shareSummary(context, session, summary) }
+        onShareClick = { session, summary -> shareSummary(context, session, summary) },
+        onExportCsvClick = { session, events, summary ->
+            pendingCsvContent = buildExperimentCsv(session, events, summary)
+            saveCsvLauncher.launch("experiment_${session.id}.csv")
+        },
+        onExportXlsxClick = { session, events, summary ->
+            pendingXlsxContent = buildExperimentXlsx(session, events, summary)
+            saveXlsxLauncher.launch("experiment_${session.id}.xlsx")
+        }
     )
 }
 
@@ -81,13 +130,16 @@ private fun ExperimentScreen(
     uiState: ExperimentUiState,
     onTitleChange: (String) -> Unit,
     onCheckpointInputChange: (String) -> Unit,
+    onDistanceInputChange: (String) -> Unit,
     onStartClick: () -> Unit,
     onStopClick: () -> Unit,
     onMarkCheckpointClick: () -> Unit,
     onSessionClick: (ExperimentSession) -> Unit,
     onDeleteSessionClick: (ExperimentSession) -> Unit,
     onRequestPermissionClick: () -> Unit,
-    onShareClick: (ExperimentSession, ExperimentSummary) -> Unit
+    onShareClick: (ExperimentSession, ExperimentSummary) -> Unit,
+    onExportCsvClick: (ExperimentSession, List<ExperimentEvent>, ExperimentSummary) -> Unit,
+    onExportXlsxClick: (ExperimentSession, List<ExperimentEvent>, ExperimentSummary) -> Unit
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item {
@@ -110,6 +162,7 @@ private fun ExperimentScreen(
                 LiveDashboardCard(
                     uiState = uiState,
                     onCheckpointInputChange = onCheckpointInputChange,
+                    onDistanceInputChange = onDistanceInputChange,
                     onMarkCheckpointClick = onMarkCheckpointClick,
                     onStopClick = onStopClick,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
@@ -128,7 +181,10 @@ private fun ExperimentScreen(
                 SummaryCard(
                     session = session,
                     summary = uiState.summary,
+                    hasEvents = uiState.events.isNotEmpty(),
                     onShareClick = { onShareClick(session, uiState.summary) },
+                    onExportCsvClick = { onExportCsvClick(session, uiState.events, uiState.summary) },
+                    onExportXlsxClick = { onExportXlsxClick(session, uiState.events, uiState.summary) },
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
                 )
             }
@@ -215,6 +271,7 @@ private fun StartSessionCard(
 private fun LiveDashboardCard(
     uiState: ExperimentUiState,
     onCheckpointInputChange: (String) -> Unit,
+    onDistanceInputChange: (String) -> Unit,
     onMarkCheckpointClick: () -> Unit,
     onStopClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -252,13 +309,30 @@ private fun LiveDashboardCard(
                 OutlinedTextField(
                     value = uiState.checkpointInput,
                     onValueChange = onCheckpointInputChange,
-                    label = { Text("Метка, например «5 м»") },
+                    label = { Text("Метка, например «за углом»") },
                     singleLine = true,
                     modifier = Modifier.weight(1f)
                 )
-                Button(onClick = onMarkCheckpointClick, enabled = uiState.checkpointInput.isNotBlank()) {
-                    Text("Отметить")
-                }
+                OutlinedTextField(
+                    value = uiState.distanceInput,
+                    onValueChange = onDistanceInputChange,
+                    label = { Text("м") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.width(80.dp)
+                )
+            }
+            Text(
+                text = "Расстояние нужно для модели затухания сигнала — можно оставить пустым, если это не про дистанцию (например, метка про глушение помехой)",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(
+                onClick = onMarkCheckpointClick,
+                enabled = uiState.checkpointInput.isNotBlank(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Отметить")
             }
             OutlinedButton(onClick = onStopClick, modifier = Modifier.fillMaxWidth()) {
                 Text("Завершить замер")
@@ -279,20 +353,26 @@ private fun DashboardMetric(label: String, value: String) {
 private fun SummaryCard(
     session: ExperimentSession,
     summary: ExperimentSummary,
+    hasEvents: Boolean,
     onShareClick: () -> Unit,
+    onExportCsvClick: () -> Unit,
+    onExportXlsxClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "Итоги: ${session.title}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+            Text(
+                text = "Итоги: ${session.title}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                if (hasEvents) {
+                    TextButton(onClick = onExportCsvClick) { Text("CSV") }
+                    TextButton(onClick = onExportXlsxClick) { Text("XLSX с графиками") }
+                }
                 if (summary.totalPings > 0) {
                     TextButton(onClick = onShareClick) { Text("Поделиться") }
                 }
@@ -305,17 +385,55 @@ private fun SummaryCard(
                 )
             } else {
                 summary.segments.forEach { segment -> SegmentRow(segment) }
+                AnalyticsBlock(summary)
             }
         }
     }
 }
 
 @Composable
+private fun AnalyticsBlock(summary: ExperimentSummary) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = "Расчёты",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = "Корреляция RSSI↔RTT: ${summary.correlation.rssiVsRtt.formatCorrelation()}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = "Корреляция RSSI↔потери: ${summary.correlation.rssiVsLoss.formatCorrelation()}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        val model = summary.pathLossModel
+        Text(
+            text = if (model != null) {
+                "Модель затухания: n=${model.pathLossExponent.format2()}, " +
+                    "RSSI(1м)=${model.rssiAt1mDbm.format1()} дБм, " +
+                    "R²=${model.rSquared.format2()} (${model.pointCount} точек)"
+            } else {
+                "Модель затухания: недостаточно меток с расстоянием (нужно ≥2)"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+private fun Double?.formatCorrelation(): String = this?.format2() ?: "недостаточно данных"
+private fun Double.format2(): String = String.format(Locale.US, "%.2f", this)
+private fun Double.format1(): String = String.format(Locale.US, "%.1f", this)
+
+@Composable
 private fun SegmentRow(segment: ExperimentSegment) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
-                text = segment.label,
+                text = segment.distanceMeters?.let { "${segment.label} (${it.format1()} м)" } ?: segment.label,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f),
@@ -394,7 +512,18 @@ private fun shareSummary(context: Context, session: ExperimentSession, summary: 
             if (segment.averageRssiDbm != null) {
                 appendLine("  RSSI: от ${segment.minRssiDbm} до ${segment.maxRssiDbm} дБм (ср. ${segment.averageRssiDbm})")
             }
+            segment.distanceMeters?.let { distanceMeters ->
+                appendLine("  расстояние: ${distanceMeters.format1()} м")
+            }
             appendLine()
+        }
+        appendLine("Корреляция RSSI↔RTT: ${summary.correlation.rssiVsRtt.formatCorrelation()}")
+        appendLine("Корреляция RSSI↔потери: ${summary.correlation.rssiVsLoss.formatCorrelation()}")
+        summary.pathLossModel?.let { model ->
+            appendLine(
+                "Модель затухания: n=${model.pathLossExponent.format2()}, " +
+                    "RSSI(1м)=${model.rssiAt1mDbm.format1()} дБм, R²=${model.rSquared.format2()}"
+            )
         }
     }
     val intent = Intent(Intent.ACTION_SEND).apply {

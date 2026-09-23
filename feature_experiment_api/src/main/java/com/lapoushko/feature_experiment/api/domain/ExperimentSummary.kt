@@ -8,6 +8,8 @@ package com.lapoushko.feature_experiment.api.domain
 data class ExperimentSegment(
     val label: String,
     val startedAtEpochMillis: Long,
+    /** Расстояние до точки доступа, заданное в метке, начавшей сегмент, м — null если не указано. */
+    val distanceMeters: Double?,
     val pingCount: Int,
     val successCount: Int,
     val averageRttMillis: Long?,
@@ -22,7 +24,9 @@ data class ExperimentSegment(
 data class ExperimentSummary(
     val segments: List<ExperimentSegment>,
     val totalPings: Int,
-    val totalSuccess: Int
+    val totalSuccess: Int,
+    val correlation: ExperimentCorrelation = ExperimentCorrelation(rssiVsRtt = null, rssiVsLoss = null),
+    val pathLossModel: PathLossModel? = null
 ) {
     val overallLossPercent: Int
         get() = if (totalPings == 0) 0 else (totalPings - totalSuccess) * 100 / totalPings
