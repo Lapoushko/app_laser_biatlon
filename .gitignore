@@ -49,3 +49,8 @@ proguard-rules.pro
 ndkBuild/
 local.properties
 google-services.json
+/claude.md
+/py/
+/requir.md
+/deg.md
+/talk.md
